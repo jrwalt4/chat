@@ -4,6 +4,8 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
+use crate::component::ArchetypeId;
+
 #[repr(transparent)]
 #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct EntityId(u32);
@@ -40,21 +42,19 @@ impl Entity {
         self.id
     }
 }
-
-pub(crate) struct EntityManager {
-    entities: HashMap<EntityId, Entity>,
-    next: AtomicU32,
-    free_list: Vec<Entity>,
+#[derive(Copy, Clone)]
+pub struct EntityLoc {
+    pub(crate) entity: Entity,
+    pub(crate) archetype: ArchetypeId,
+    pub(crate) index: usize,
 }
 
-impl Default for EntityManager {
-    fn default() -> Self {
-        Self {
-            entities: Default::default(),
-            next: AtomicU32::new(1),
-            free_list: Vec::new(),
-        }
-    }
+#[derive(Default)]
+pub(crate) struct EntityManager {
+    entities: HashMap<EntityId, Entity>,
+    index: HashMap<EntityId, EntityLoc>,
+    next: AtomicU32,
+    free_list: Vec<Entity>,
 }
 
 impl EntityManager {
@@ -76,6 +76,7 @@ impl EntityManager {
         match self.entities.remove(&id) {
             Some(e) => {
                 self.free_list.push(e);
+                self.index.remove(&id);
                 Ok(())
             }
             None => Err(EntityError::DoesNotExist(id)),
@@ -89,6 +90,10 @@ impl EntityManager {
             panic!("Too many entities");
         }
         e_id.into()
+    }
+
+    pub(crate) fn get_loc(&self, id: EntityId) -> Option<EntityLoc> {
+        self.index.get(&id).copied()
     }
 }
 

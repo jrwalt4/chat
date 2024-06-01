@@ -1,16 +1,13 @@
 //! World datastructure to hold entities, components, and resources.
 
-use std::collections::HashMap;
-
 use crate::{
-    component::{ArchetypeId, ArchetypeManager},
-    entity::{EntityId, EntityManager},
+    component::{ArchetypeManager, Component},
+    entity::{EntityManager, Entity},
 };
 
 #[derive(Default)]
 pub struct World {
     entities: EntityManager,
-    entity_index: HashMap<EntityId, ArchetypeId>,
     archetypes: ArchetypeManager,
 }
 
@@ -21,5 +18,12 @@ impl World {
 
     pub(crate) fn archetypes(&self) -> &ArchetypeManager {
         &self.archetypes
+    }
+
+    pub fn get_component<C: Component>(&self, entity: Entity) -> Option<&C> {
+        let loc = self.entities.get_loc(entity.id())?;
+        let arch = self.archetypes.get_by_id(&loc.archetype).expect("Archetype does not exist");
+        let slice = unsafe { arch.get_column_as_slice::<C>().expect("Column does not exist") };
+        Some(&slice[loc.index])
     }
 }

@@ -197,7 +197,7 @@ impl Archetype {
 
     // Safety: May not actually be unsafe since we are keeping track of the
     // length and ensuring that C matches what is stored in the corresponding Column
-    unsafe fn get_column_as_slice<C: Component>(&self) -> Option<&[C]> {
+    pub(crate) unsafe fn get_column_as_slice<C: Component>(&self) -> Option<&[C]> {
         self.get_column::<C>()
             .map(|col| std::slice::from_raw_parts(col.as_ptr(), self.len()))
     }
@@ -214,7 +214,7 @@ impl Archetype {
     fn grow(&mut self) {
         let old_capacity = self.capacity;
         let new_capacity = std::cmp::max(old_capacity * 2, 8); // reserve at least 8 places
-        
+
         for comp in &mut self.components {
             let comp_layout = comp.info.layout;
             let new_size = comp_layout.size() * new_capacity;
@@ -224,23 +224,17 @@ impl Archetype {
                     let old_layout = unsafe {
                         Layout::from_size_align_unchecked(
                             comp_layout.size() * old_capacity,
-                            comp_layout.align()
+                            comp_layout.align(),
                         )
                     };
-                    let ptr = unsafe {
-                        realloc(comp.data.as_ptr(), old_layout, new_size)
-                    };
+                    let ptr = unsafe { realloc(comp.data.as_ptr(), old_layout, new_size) };
                     comp.data = NonNull::new(ptr).unwrap();
-                },
+                }
                 false => {
                     // use alloc
-                    let new_layout = Layout::from_size_align(
-                        new_size,
-                        comp_layout.align()
-                    ).unwrap();
-                    let ptr = unsafe {
-                        alloc(new_layout)
-                    };
+                    let new_layout =
+                        Layout::from_size_align(new_size, comp_layout.align()).unwrap();
+                    let ptr = unsafe { alloc(new_layout) };
                     comp.data = NonNull::new(ptr).unwrap();
                 }
             }
@@ -355,6 +349,10 @@ impl Default for ArchetypeManager {
 impl ArchetypeManager {
     pub(crate) fn new() -> Self {
         Default::default()
+    }
+
+    pub(crate) fn get_by_id(&self, id: &ArchetypeId) -> Option<&Archetype> {
+        self.archetypes.get(id)
     }
 
     pub(crate) fn get_one<B: Bundle>(&self) -> Option<&Archetype> {
