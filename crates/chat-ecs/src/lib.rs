@@ -1,14 +1,12 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+//! An Entiy-Component-System tailored to
+//! calculations performed in SWMMM engine.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#![allow(dead_code)]
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+mod component;
+mod entity;
+mod system;
+mod world;
+
+pub use entity::Entity;
+pub use world::World;
