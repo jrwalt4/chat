@@ -1,21 +1,15 @@
 //! Systems that act on the world
 //!
-//! Systems are executed concurrently through async [`Future`]'s and request
-//! access to components through a [`SystemContext`].
 
-use crate::{
-    component::Component,
-    query::{Query, QueryError, QueryResult},
-    world::World,
-};
+use std::marker::PhantomData;
+
+use crate::world::World;
 
 pub trait System: Send + Sync + 'static {
-    fn run(&self, context: &mut SystemContext<'_>) -> SystemResult;
-}
+    type Input;
+    type Output;
 
-/// Execution context for a system
-pub struct SystemContext<'a> {
-    world: &'a World,
+    fn run(&mut self, input: Self::Input, world: &World) -> Self::Output;
 }
 
 pub type SystemResult = Result<(), SystemError>;
@@ -23,18 +17,6 @@ pub type SystemResult = Result<(), SystemError>;
 pub enum SystemError {
     LogicError,
     MaxIterations,
-}
-
-impl<'a> SystemContext<'a> {
-    async fn query<C: Component>(&self) -> QueryResult<'a, C> {
-        let query = Query::new(
-            self.world
-                .archetypes()
-                .query_component::<C>()
-                .ok_or(QueryError::Empty)?,
-        );
-        Ok(query)
-    }
 }
 
 pub trait SystemParam: Sized {
@@ -84,7 +66,7 @@ impl<P0: SystemParam, P1: SystemParam, P2: SystemParam> SystemParam for (P0, P1,
     }
 }
 
-pub trait SystemFunction<Hint>: Send + Sync + 'static {
+pub trait SystemParamFunction<Hint>: Send + Sync + 'static {
     type Input;
     type Output;
     type Params: SystemParam;
@@ -92,7 +74,8 @@ pub trait SystemFunction<Hint>: Send + Sync + 'static {
     fn run(&self, input: Self::Input, params: SystemParamItem<Self::Params>) -> Self::Output;
 }
 
-impl<In, Out, P0: SystemParam, F: Send + Sync + 'static> SystemFunction<fn(In, P0) -> Out> for F
+impl<In, Out, P0: SystemParam, F: Send + Sync + 'static> SystemParamFunction<fn(In, P0) -> Out>
+    for F
 where
     for<'a> &'a F: Fn(In, SystemParamItem<'_, '_, P0>) -> Out,
 {
@@ -105,5 +88,32 @@ where
             f(i, p)
         }
         call_inner(self, input, params)
+    }
+}
+
+pub struct FunctionSystem<F, Hint>
+where
+    F: SystemParamFunction<Hint>,
+{
+    func: F,
+    param_state: Option<<F::Params as SystemParam>::State>,
+    signature: PhantomData<fn() -> Hint>,
+}
+
+impl<F, Hint: 'static> System for FunctionSystem<F, Hint>
+where
+    F: SystemParamFunction<Hint>,
+{
+    type Input = <F as SystemParamFunction<Hint>>::Input;
+    type Output = <F as SystemParamFunction<Hint>>::Output;
+
+    fn run(&mut self, input: Self::Input, world: &World) -> Self::Output {
+        let params = unsafe {
+            <F::Params as SystemParam>::get_item(
+                self.param_state.as_mut().expect("No ParamState"),
+                world,
+            )
+        };
+        self.func.run(input, params)
     }
 }
