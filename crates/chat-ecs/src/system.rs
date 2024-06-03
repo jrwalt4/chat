@@ -3,10 +3,9 @@
 //! Systems are executed concurrently through async [`Future`]'s and request
 //! access to components through a [`SystemContext`].
 
-use std::marker::PhantomData;
-
 use crate::{
-    component::{ArchetypeId, Component},
+    component::Component,
+    query::{Query, QueryError, QueryResult},
     world::World,
 };
 
@@ -107,24 +106,4 @@ where
         }
         call_inner(self, input, params)
     }
-}
-
-pub struct Query<'a, C> {
-    archetypes: Vec<&'a ArchetypeId>,
-    component: PhantomData<&'a C>,
-}
-
-impl<'a, C: Component> Query<'a, C> {
-    fn new(archetype_iter: impl IntoIterator<Item = &'a ArchetypeId>) -> Self {
-        Self {
-            archetypes: Vec::from_iter(archetype_iter.into_iter()),
-            component: PhantomData,
-        }
-    }
-}
-
-pub type QueryResult<'a, C> = Result<Query<'a, C>, QueryError>;
-
-pub enum QueryError {
-    Empty,
 }

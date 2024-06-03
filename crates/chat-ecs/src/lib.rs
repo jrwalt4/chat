@@ -5,8 +5,9 @@
 
 mod component;
 mod entity;
+mod query;
 mod system;
 mod world;
 
-pub use entity::Entity;
-pub use world::World;
+// pub use entity::Entity;
+// pub use world::World;
