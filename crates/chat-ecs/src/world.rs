@@ -2,7 +2,7 @@
 
 use crate::{
     component::{ArchetypeManager, Component},
-    entity::{EntityManager, Entity},
+    entity::{Entity, EntityManager},
 };
 
 #[derive(Default)]
@@ -21,9 +21,15 @@ impl World {
     }
 
     pub fn get_component<C: Component>(&self, entity: Entity) -> Option<&C> {
-        let loc = self.entities.get_loc(entity.id())?;
-        let arch = self.archetypes.get_by_id(&loc.archetype).expect("Archetype does not exist");
-        let slice = unsafe { arch.get_column_as_slice::<C>().expect("Column does not exist") };
-        Some(&slice[loc.index])
+        let loc = self.entities.get_loc(entity)?;
+        let arch = self
+            .archetypes
+            .get_by_id(&loc.archetype())
+            .expect("Archetype does not exist");
+        let slice = unsafe {
+            arch.get_column_as_slice::<C>()
+                .expect("Column does not exist")
+        };
+        Some(&slice[loc.index()])
     }
 }

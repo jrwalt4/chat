@@ -51,7 +51,11 @@ impl<P0: SystemParam, P1: SystemParam, P2: SystemParam> SystemParam for (P0, P1,
     type State = (P0::State, P1::State, P2::State);
 
     fn init_state(world: &World) -> Self::State {
-        (P0::init_state(world), P1::init_state(world), P2::init_state(world))
+        (
+            P0::init_state(world),
+            P1::init_state(world),
+            P2::init_state(world),
+        )
     }
 
     unsafe fn from_state<'world, 'state>(
@@ -75,8 +79,7 @@ pub trait SystemParamFunction<Hint>: Send + Sync + 'static {
     fn run(&self, input: Self::Input, params: Self::Params) -> Self::Output;
 }
 
-impl<Out, P0: SystemParam, F: Send + Sync + 'static> SystemParamFunction<fn(P0) -> Out>
-    for F
+impl<Out, P0: SystemParam, F: Send + Sync + 'static> SystemParamFunction<fn(P0) -> Out> for F
 where
     for<'a> &'a F: Fn(P0) -> Out,
 {
@@ -124,14 +127,14 @@ where
     pub fn new(func: F) -> Self {
         Self {
             func,
-            signature: PhantomData
+            signature: PhantomData,
         }
     }
 
     pub fn into_system(self, world: &World) -> impl System<Input = F::Input, Output = F::Output> {
         FunctionSystem {
             func: self,
-            param_state: <F::Params as SystemParam>::init_state(world)
+            param_state: <F::Params as SystemParam>::init_state(world),
         }
     }
 }
@@ -152,19 +155,14 @@ where
     type Output = <F as SystemParamFunction<Hint>>::Output;
 
     fn run(&mut self, input: Self::Input, world: &World) -> Self::Output {
-        let params = unsafe {
-            <F::Params as SystemParam>::from_state(
-                &mut self.param_state,
-                world,
-            )
-        };
+        let params =
+            unsafe { <F::Params as SystemParam>::from_state(&mut self.param_state, world) };
         self.func.func.run(input, params)
     }
 }
 
 #[test]
 fn system_check() {
-
     struct DummyParam(i32);
 
     impl SystemParam for DummyParam {
@@ -187,7 +185,7 @@ fn system_check() {
     }
 
     let world = World::new();
-    
+
     let mut func_sys = FunctionSystemDef::new(dummy_system).into_system(&world);
 
     func_sys.run((), &world);

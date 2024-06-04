@@ -7,7 +7,7 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
-use crate::entity::{Entity, EntityId};
+use crate::entity::Entity;
 
 /// A type that can be stored as part of an [`Entity`].
 pub trait Component: Send + Sync + 'static {}
@@ -112,7 +112,7 @@ pub struct Archetype {
     id: ArchetypeId,
 
     /// The entities stored in this Archetype.
-    entities: Vec<EntityId>,
+    entities: Vec<Entity>,
 
     /// Allocated space in each column.
     capacity: usize,
@@ -207,7 +207,7 @@ impl Archetype {
         if new_index + 1 > self.capacity >> 1 {
             self.grow();
         }
-        self.entities.push(entity.id());
+        self.entities.push(entity);
         ArchetypeRowMut::new(self, new_index)
     }
 
