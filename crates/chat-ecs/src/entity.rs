@@ -7,39 +7,27 @@ use std::{
 
 use crate::component::ArchetypeId;
 
-#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
-pub enum Entity {
-    Null,
-    Id {
-        id: NonZeroU32,
-        gen: u16,
-        flags: u16,
-    },
-}
-
-impl Hash for Entity {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self {
-            Self::Id { id, .. } => state.write_u32((*id).into()),
-            Self::Null => state.write_u32(0),
-        }
-    }
-}
+/// A handle for a specific entity.
+///
+/// Values 0 through 2^31-1 are reserved for model entities added
+/// from input files, while values 2^31 through u32::MAX (2^32-1)
+/// are for more temporary entities created and destroyed during
+/// simulation (notifications, intermediate artifacts, etc.).
+/// It is up to the user to ensure entity id's are unique for values
+/// in the lower range, the upper range is autoincremented.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+pub struct Entity(u32);
 
 impl Entity {
-    pub(crate) fn with_id<I: TryInto<NonZeroU32>>(i: I) -> Self {
-        i.try_into().map_or(Entity::Null, |id| Entity::Id {
-            id,
-            gen: Default::default(),
-            flags: Default::default(),
-        })
-    }
+    const EXTERNAL_MIN: u32 = 0;
+    const EXTERNAL_MAX: u32 = 0x7fffffff;
+    const INTERNAL_MIN: u32 = 0x80000000;
+    const INTERNAL_MAX: u32 = u32::MAX - 1;
+
+    const NULL: Entity = Entity(u32::MAX);
 
     pub fn id(self) -> u32 {
-        match self {
-            Self::Null => 0,
-            Self::Id { id, .. } => id.into(),
-        }
+        self.0
     }
 }
 
@@ -63,11 +51,20 @@ impl EntityLoc {
     }
 }
 
-#[derive(Default)]
 pub(crate) struct EntityManager {
     entities: HashMap<Entity, Location>,
     next: AtomicU32,
     free_list: Vec<Entity>,
+}
+
+impl Default for EntityManager {
+    fn default() -> Self {
+        Self {
+            entities: Default::default(),
+            next: AtomicU32::new(Entity::INTERNAL_MIN),
+            free_list: Default::default(),
+        }
+    }
 }
 
 impl EntityManager {
@@ -75,16 +72,32 @@ impl EntityManager {
         Default::default()
     }
 
-    pub(crate) fn create(&mut self) -> Entity {
+    pub(crate) fn with_id(&mut self, id: u32) -> Result<Entity, EntityError> {
+        if id > Entity::EXTERNAL_MAX {
+            return Err(EntityError::OutOfBounds);
+        }
+        let e = Entity(id);
+        if self.entities.contains_key(&e) {
+            return Err(EntityError::DuplicateID(id));
+        }
+        Ok(e)
+    }
+
+    /// Create [`Entity`] without checking whether it exists, but
+    /// still checks if it is within bounds.
+    ///
+    /// This is not `unsafe`, but can result in unsound logic.  
+    pub fn with_id_unchecked(id: u32) -> Result<Entity, EntityError> {
+        if id > Entity::EXTERNAL_MAX {
+            return Err(EntityError::OutOfBounds);
+        }
+        Ok(Entity(id))
+    }
+
+    pub(crate) fn create(&mut self) -> Result<Entity, EntityError> {
         match self.free_list.pop() {
-            Some(mut ent) => {
-                match &mut ent {
-                    Entity::Id { ref mut gen, .. } => *gen += 1,
-                    _ => panic!("Null Entity in free list"),
-                }
-                ent
-            }
-            None => Entity::with_id(self.alloc()),
+            Some(ent) => Ok(ent),
+            None => self.alloc().map(|id| Entity(id.into())),
         }
     }
 
@@ -98,10 +111,10 @@ impl EntityManager {
         }
     }
 
-    fn alloc(&self) -> NonZeroU32 {
+    fn alloc(&self) -> Result<NonZeroU32, EntityError> {
         let e_id = self.next.fetch_add(1, Ordering::Relaxed);
         // check for wrapping
-        e_id.try_into().expect("Too many entities")
+        e_id.try_into().map_err(|_| EntityError::Overflow)
     }
 
     pub(crate) fn get_loc(&self, id: Entity) -> Option<EntityLoc> {
@@ -111,6 +124,10 @@ impl EntityManager {
     }
 }
 
+#[derive(Debug)]
 pub enum EntityError {
     DoesNotExist(Entity),
+    DuplicateID(u32),
+    OutOfBounds,
+    Overflow,
 }

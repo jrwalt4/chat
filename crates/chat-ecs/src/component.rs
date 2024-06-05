@@ -407,6 +407,8 @@ impl ArchetypeManager {
 
 #[test]
 fn archetype() {
+    use crate::entity::EntityManager;
+
     static mut LENGTH_DROP_COUNT: u32 = 0;
     #[derive(Clone, PartialEq, PartialOrd, Debug)]
     struct Length(f32);
@@ -436,7 +438,7 @@ fn archetype() {
 
     unsafe {
         println!("Creating arch row");
-        let mut row = arch.insert(Entity::with_id(1));
+        let mut row = arch.insert(EntityManager::with_id_unchecked(1).unwrap());
         println!("Writing Length");
         row.write(Length(2.0));
         println!("Writing Flow");
